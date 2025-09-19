@@ -10,6 +10,7 @@ pandas
 langchain
 langchain-google-genai
 requests
+pyaudioop
 Pillow
 google-cloud-speech
 pydub
