@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from typing import Optional, Any, Dict
 from pydantic import SecretStr, BaseModel
 import requests
+from PIL import Image
+import io
+
 
 # Import local modules and utility functions
 from krishisakhi_api import schemas
@@ -70,45 +73,42 @@ from google.oauth2 import service_account
 # ... (your existing lifespan manager and app setup)
 
 # --- UPDATED: Helper Function for Google Speech-to-Text (without pydub) ---
-# main.py
-from fastapi import HTTPException
-from google.cloud import speech
-from pydub import AudioSegment
-import io
-
-# ... (rest of your imports and app setup)
-
-def transcribe_audio_with_google(audio_bytes: bytes, language_code: str) -> str:
+def transcribe_audio_with_google(audio_bytes: bytes, language_code: str, filename: str) -> str:
     """
-    Transcribes any common audio file format using the Google Speech-to-Text API
-    by dynamically detecting its properties and standardizing the format.
+    Transcribes various audio file formats by guessing the encoding from the filename.
+    WARNING: This approach is not robust and may fail or produce poor results if the
+    audio file's properties do not match the hardcoded assumptions.
     """
     client = app_state.get("speech_client")
     if not client:
         raise HTTPException(status_code=503, detail="Speech client not initialized.")
     
     try:
-        # 1. Use pydub to read the audio file from memory, regardless of format
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio = speech.RecognitionAudio(content=audio_bytes)
         
-        # 2. Get the actual audio properties
-        sample_rate = audio_segment.frame_rate
-        channels = audio_segment.channels
-        
-        # 3. Convert the audio to the lossless WAV format for best results
-        buffer = io.BytesIO()
-        audio_segment.export(buffer, format="wav")
-        content = buffer.getvalue()
+        # --- Guess the encoding based on the file extension ---
+        encoding = None
+        file_ext = os.path.splitext(filename)[1].lower()
 
-        print(f"Audio properties detected: Sample Rate={sample_rate}, Channels={channels}")
+        if file_ext == ".ogg":
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        elif file_ext == ".wav":
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        elif file_ext == ".mp3":
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        # .m4a (AAC) is not directly supported by this enum, FLAC is an alternative
+        elif file_ext == ".flac": 
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported audio file format: {file_ext}")
+
+        # --- Hardcoded sample rate - THIS IS A MAJOR ASSUMPTION ---
+        sample_rate = 16000 
         
-        # 4. Use these dynamic properties in the recognition config
-        audio = speech.RecognitionAudio(content=content)
         config_speech = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16, # Use LINEAR16 as we converted to WAV
+            encoding=encoding,
             sample_rate_hertz=sample_rate,
             language_code=f"{language_code}-IN",
-            audio_channel_count=channels
         )
 
         response = client.recognize(config=config_speech, audio=audio)
@@ -122,6 +122,7 @@ def transcribe_audio_with_google(audio_bytes: bytes, language_code: str) -> str:
     except Exception as e:
         print(f"Error during Google Speech-to-Text transcription: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to transcribe audio: {e}")
+
 # main.py (or wherever your helper function is located)
 
 import json
@@ -163,7 +164,7 @@ def get_weather_for_user(user_id: str = Path(..., example="ramesh_123")):
 async def chat_with_assistant(
     user_id: str = Path(..., example="ramesh_123"),
     text_query: Optional[str] = Form(None),
-    language_code: str = Form("en"), # <-- NEW: Language code parameter
+    language_code: str = Form("en"), 
     image_file: Optional[UploadFile] = File(None),
     audio_file: Optional[UploadFile] = File(None)
 ):
@@ -204,19 +205,67 @@ async def chat_with_assistant(
     
     return schemas.ChatResponse(response_text=final_response_text, transcribed_text=transcribed_text)
 
+def generate_description_from_image(image_bytes: bytes) -> str:
+    """Uses Gemini Vision to generate a description for a log entry."""
+    print("Generating description from image...")
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        # Using the globally defined llm_model
+        response = llm.invoke(
+            [
+                "Describe this image from a farm in one concise sentence for a logbook entry.",
+                image
+            ]
+        )
+        description = response.content
+        print(f"✅ Generated description: {description}")
+        return description
+    except Exception as e:
+        print(f"❌ Error generating image description: {e}")
+        return "Could not generate description from image."
+
+
+# --- UPDATED: Logging API Endpoint ---
 @app.post("/logs/{farm_id}")
-def create_log_entry(farm_id: str, log_request: schemas.LogEntry):
-    """Receives structured text notes, saves them via the DB Gateway."""
+async def create_log_entry(
+    farm_id: str,
+    log_type: str = Form(...),
+    notes: Optional[str] = Form(None),
+    image_file: Optional[UploadFile] = File(None)
+):
+    """
+    Receives log data. If an image is provided, it generates a description.
+    If notes are provided, it uses those. Finally, it saves the log via the DB Gateway.
+    """
+    description = notes
+    image_bytes = None
+
+    # If an image file is uploaded, it takes priority for the description
+    if image_file:
+        image_bytes = await image_file.read()
+        description = generate_description_from_image(image_bytes)
+
+    if not description:
+        raise HTTPException(status_code=400, detail="Log must have notes or an image.")
+
+    # This is the final data payload to be sent to your database backend
     log_data_to_save = {
         "farmId": farm_id,
-        "activityType": log_request.log_type,
-        "description": log_request.notes,
-        "details": log_request.details
+        "activityType": log_type,
+        "description": description,
+        # In a real implementation, you would upload the image to a service like
+        # Firebase Storage and include the URL here.
+        # "imageUrl": "..." 
     }
+
+    # Call your API client to save the data
     result = crud.save_log_entry(farm_id=farm_id, log_data=log_data_to_save)
+    
     if not result:
         raise HTTPException(status_code=500, detail="Failed to save log entry via API.")
+    
     return result
+
 
 from datetime import datetime, timezone
 
