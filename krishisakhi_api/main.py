@@ -9,14 +9,14 @@ from typing import Optional, Any, Dict
 from pydantic import SecretStr, BaseModel
 
 # Import local modules and utility functions
-import schemas
-import config
-import crud
-from utils.chatbot_utils import process_chat_query
-from utils.ml_utils import get_dashboard_predictions
-from utils.api_utils import fetch_weather
-from utils.rag_utils import load_faiss_index
-from utils.translation_utils import translate_text
+from krishisakhi_api import schemas
+from krishisakhi_api import config
+from krishisakhi_api import crud
+from krishisakhi_api.utils.chatbot_utils import process_chat_query
+from krishisakhi_api.utils.ml_utils import get_dashboard_predictions
+from krishisakhi_api.utils.api_utils import fetch_weather
+from krishisakhi_api.utils.rag_utils import load_faiss_index
+from krishisakhi_api.utils.translation_utils import translate_text
 
 # Import Google Cloud and LangChain libraries
 from google.cloud import speech

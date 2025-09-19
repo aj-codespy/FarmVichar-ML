@@ -1,17 +1,28 @@
 # utils/translation_utils.py
 import google.generativeai as genai
-from config import GEMINI_API_KEY, MODEL_NAME, SUPPORTED_LANGUAGES
+# --- CORRECTED IMPORT ---
+# Import the config module from the parent package
+from krishisakhi_api import config
 
-genai.configure(api_key=GEMINI_API_KEY)
-translation_model = genai.GenerativeModel(MODEL_NAME)
+# utils/translation_utils.py
+import google.generativeai as genai
+from krishisakhi_api import config
+
+genai.configure(api_key=config.GEMINI_API_KEY)
+translation_model = genai.GenerativeModel(
+    config.MODEL_NAME
+)
+
+# ... (the rest of your translate_text function remains the same)
 
 def translate_text(text: str, src: str, dest: str) -> str:
     """Translates text with detailed logging."""
-    src_lang_name = SUPPORTED_LANGUAGES.get(src, src)
-    dest_lang_name = SUPPORTED_LANGUAGES.get(dest, dest)
+    # --- UPDATED USAGE ---
+    src_lang_name = config.SUPPORTED_LANGUAGES.get(src, src)
+    dest_lang_name = config.SUPPORTED_LANGUAGES.get(dest, dest)
+    
     print(f"[TRANSLATE] Translating from '{src_lang_name}' to '{dest_lang_name}': '{text[:50]}...'")
     try:
-        # Don't translate if source and destination languages are the same
         if src == dest:
             print("[TRANSLATE] Source and destination languages are the same. Skipping.")
             return text

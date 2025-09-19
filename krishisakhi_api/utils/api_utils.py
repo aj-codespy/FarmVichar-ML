@@ -1,6 +1,6 @@
 # utils/api_utils.py
 import requests
-from config import OPENWEATHER_API_KEY, DATAGOV_API_KEY, MARKET_PRICES_RESOURCE_ID
+from krishisakhi_api.config import OPENWEATHER_API_KEY, DATAGOV_API_KEY, MARKET_PRICES_RESOURCE_ID
 
 def fetch_weather(village: str) -> dict:
     """Fetches weather data with comprehensive error handling."""

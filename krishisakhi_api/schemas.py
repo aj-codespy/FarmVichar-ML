@@ -85,16 +85,12 @@ class OnboardingVoiceResponse(BaseModel):
     """
     transcribed_text: str
     extracted_value: Any
-    
-    # schemas.py
-# ... (all your other schemas)
 
 class StructuredLog(BaseModel):
     """Defines the structured output of a parsed farm log entry."""
-    log_type: str = Field(..., description="The type of activity, e.g., 'Sowing', 'Irrigation', 'Pest Sighting'.")
-    crop_name: str = Field(..., description="The crop the activity is related to.")
-    date: str = Field(..., description="The date of the activity in YYYY-MM-DD format.")
-    summary: str = Field(..., description="A brief, one-sentence summary of the log.")
-    details: Dict[str, Any] = Field({}, description="A dictionary of specific details, like 'product_name' or 'quantity_kg'.")
-    
-    
+    log_type: Optional[str]
+    crop_name: Optional[str]
+    date: Optional[str]
+    notes: Optional[str]
+    details: Optional[Dict[str, Any]]
+

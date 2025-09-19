@@ -1,11 +1,12 @@
 # utils/ml_utils.py
-import config
-import schemas
+from krishisakhi_api import config
+from krishisakhi_api import schemas
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, SecretStr
 
 # --- Initialize LangChain Client with a Structured Output Parser ---
 # This binds our Pydantic schema to the LLM, forcing it to return valid JSON.
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=config.GEMINI_API_KEY)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=SecretStr(config.GEMINI_API_KEY))
 structured_llm = llm.with_structured_output(schemas.DashboardPredictions)
 
 def get_dashboard_predictions(profile: dict, weather: dict) -> dict:
@@ -43,9 +44,13 @@ def get_dashboard_predictions(profile: dict, weather: dict) -> dict:
     """
     
     try:
-        # LangChain handles the structured JSON output automatically
         report = structured_llm.invoke(prompt)
-        return report.dict()
+        if isinstance(report, BaseModel):
+            return report.dict()
+        elif isinstance(report, dict):
+            return report
+        else:
+            return dict(report)
     except Exception as e:
         print(f"Error during LangChain dashboard generation: {e}")
         # Return a default dictionary that matches the schema in case of an error

@@ -1,6 +1,6 @@
 # crud.py
 import requests
-import config
+from krishisakhi_api import config
 from typing import Optional, Dict, List, Any
 
 # --- Helper function to handle API requests ---

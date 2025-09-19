@@ -1,15 +1,15 @@
 # utils/chatbot_utils.py
-import google.generativeai as genai
-import config
-from .translation_utils import translate_text
-from .rag_utils import rag_retrieve
+from krishisakhi_api import config
+from krishisakhi_api.utils.translation_utils import translate_text
+from krishisakhi_api.utils.rag_utils import rag_retrieve
 import io
 from PIL import Image
+import google.generativeai as genai
 
+# Configure Gemini API key globally (if needed)
 genai.configure(api_key=config.GEMINI_API_KEY)
 llm_model = genai.GenerativeModel(config.MODEL_NAME)
 
-# --- THIS FUNCTION WAS MISSING ---
 def analyze_image_with_gemini(image_bytes: bytes) -> str:
     """Uses Gemini's multimodal capability to analyze the provided image."""
     try:
@@ -20,8 +20,6 @@ def analyze_image_with_gemini(image_bytes: bytes) -> str:
     except Exception as e:
         print(f"Image analysis failed: {e}")
         return "Could not analyze the uploaded image."
-# --- END OF MISSING FUNCTION ---
-
 
 def process_chat_query(query: str, profile: dict, predictions: dict, faiss_index, docs: list[str], language: str, image_bytes: bytes | None = None) -> str:
     """
