@@ -62,42 +62,50 @@ app = FastAPI(lifespan=lifespan, title="FarmVichar Service")
 # In your main.py or a utils file
 from fastapi import HTTPException
 from google.cloud import speech
-from pydub import AudioSegment
 import io
 
-def transcribe_audio_with_google(audio_bytes: bytes, language_code: str) -> str:
+from google.cloud import speech
+from google.oauth2 import service_account
+
+# ... (your existing lifespan manager and app setup)
+
+# --- UPDATED: Helper Function for Google Speech-to-Text (without pydub) ---
+def transcribe_audio_with_google(audio_bytes: bytes, language_code: str, filename: str) -> str:
     """
-    Transcribes any common audio file format using the Google Speech-to-Text API
-    by dynamically detecting its properties.
+    Transcribes various audio file formats by guessing the encoding from the filename.
+    WARNING: This approach is not robust and may fail or produce poor results if the
+    audio file's properties do not match the hardcoded assumptions.
     """
     client = app_state.get("speech_client")
     if not client:
         raise HTTPException(status_code=503, detail="Speech client not initialized.")
     
     try:
-        # --- NEW: Use pydub to inspect the audio ---
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        audio = speech.RecognitionAudio(content=audio_bytes)
         
-        # Get the audio properties
-        sample_rate = audio_segment.frame_rate
-        channels = audio_segment.channels
-        
-        # Google Speech-to-Text works best with lossless formats like LINEAR16 (WAV)
-        # We can convert the audio in-memory to this format for best results.
-        # This ensures that no matter the input (MP3, OGG, etc.), the format sent to Google is consistent.
-        buffer = io.BytesIO()
-        audio_segment.export(buffer, format="wav")
-        content = buffer.getvalue()
+        # --- Guess the encoding based on the file extension ---
+        encoding = None
+        file_ext = os.path.splitext(filename)[1].lower()
 
-        print(f"Audio properties detected: Sample Rate={sample_rate}, Channels={channels}")
+        if file_ext == ".ogg":
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        elif file_ext == ".wav":
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        elif file_ext == ".mp3":
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        # .m4a (AAC) is not directly supported by this enum, FLAC is an alternative
+        elif file_ext == ".flac": 
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported audio file format: {file_ext}")
+
+        # --- Hardcoded sample rate - THIS IS A MAJOR ASSUMPTION ---
+        sample_rate = 16000 
         
-        # --- UPDATED: Use dynamic properties in the config ---
-        audio = speech.RecognitionAudio(content=content)
         config_speech = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16, # Use LINEAR16 as we converted to WAV
+            encoding=encoding,
             sample_rate_hertz=sample_rate,
             language_code=f"{language_code}-IN",
-            audio_channel_count=channels
         )
 
         response = client.recognize(config=config_speech, audio=audio)
