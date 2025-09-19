@@ -1,0 +1,13 @@
+# render.yaml
+services:
+  - type: web
+    name: krishisakhi-api
+    env: python
+    plan: free # or your preferred plan
+    buildCommand: |
+      apt-get update && apt-get install -y portaudio19-dev
+      pip install -r requirements.txt
+    startCommand: "uvicorn krishisakhi_api.main:app --host 0.0.0.0 --port 10000"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
