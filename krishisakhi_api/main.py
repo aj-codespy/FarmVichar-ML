@@ -116,31 +116,46 @@ def get_weather_for_user(user_id: str = Path(..., example="ramesh_123")):
 async def chat_with_assistant(
     user_id: str = Path(..., example="ramesh_123"),
     text_query: Optional[str] = Form(None),
+    language_code: str = Form("en"), # <-- NEW: Language code parameter
     image_file: Optional[UploadFile] = File(None),
     audio_file: Optional[UploadFile] = File(None)
 ):
+    """
+    Main conversational endpoint. Handles text, image, and voice.
+    Translates the final response into the specified language_code.
+    """
     profile = crud.get_user_profile(user_id)
     if not profile: raise HTTPException(status_code=404, detail="User profile not found.")
 
     user_query, transcribed_text = text_query, None
-    user_language = profile.get("preferred_language", "en")
+
+    # Determine the source language from the user's profile for transcription
+    source_language = profile.get("preferredLanguage", "en")
 
     if audio_file:
         audio_bytes = await audio_file.read()
-        transcribed_text = transcribe_audio_with_google(audio_bytes, language_code=user_language)
-        user_query = translate_text(transcribed_text, src=user_language, dest='en')
+        transcribed_text = transcribe_audio_with_google(audio_bytes, language_code=source_language)
+        # Always translate the transcribed text to English for the RAG pipeline
+        user_query = translate_text(transcribed_text, src=source_language, dest='en')
     
     if not user_query: raise HTTPException(status_code=400, detail="No query provided.")
+    
     image_bytes = await image_file.read() if image_file else None
     weather_data = fetch_weather(profile.get('village',''))
     predictions = get_dashboard_predictions(profile, weather_data)
     
-    ai_response_text = process_chat_query(
+    # --- Step 1: Get the core AI response in English ---
+    english_response = process_chat_query(
         query=user_query, profile=profile, predictions=predictions,
         faiss_index=app_state["faiss_index"], docs=app_state["docs"],
-        language=user_language, image_bytes=image_bytes
+        language='en', # The core processing is done in English
+        image_bytes=image_bytes
     )
-    return schemas.ChatResponse(response_text=ai_response_text, transcribed_text=transcribed_text)
+
+    # --- Step 2: Translate the English response to the desired output language ---
+    final_response_text = translate_text(english_response, src='en', dest=language_code)
+    
+    return schemas.ChatResponse(response_text=final_response_text, transcribed_text=transcribed_text)
 
 @app.post("/logs/{farm_id}")
 def create_log_entry(farm_id: str, log_request: schemas.LogEntry):

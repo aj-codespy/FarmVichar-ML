@@ -34,7 +34,6 @@ def process_chat_query(query: str, profile: dict, predictions: dict, faiss_index
     if image_bytes:
         # This call will now work correctly
         image_analysis = analyze_image_with_gemini(image_bytes)
-        
     rag_context = rag_retrieve(eng_query, faiss_index, docs)
     
     prompt = f"""
@@ -49,7 +48,7 @@ def process_chat_query(query: str, profile: dict, predictions: dict, faiss_index
 
     Based on all the above information, provide a comprehensive answer in {native_language_name}.
     
-    The answer has to be to the point only answering the given {eng_query} question only. No extra information. Only answer the asked question and give a small to the point reasoning for the same no extra analysis.
+    The answer has to be to the point only answering the given {eng_query} question only. No extra information. Only answer the asked question and give a small to the point reasoning for the same no extra analysis. Provide everything in proper markdown.
     """
     
     response = llm_model.generate_content(prompt)
