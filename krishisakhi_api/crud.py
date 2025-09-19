@@ -42,6 +42,12 @@ def get_user_profile(user_id: str) -> Optional[Dict]:
     print(f"⚠️ No farms found for user: {user_id}")
     return None
 
+def get_alert(user_id:str):
+    alerts = _make_api_request('GET', f'/api/users/{user_id}/alerts/')
+    if alerts and isinstance(alerts, list) and len(alerts) > 0:
+        return alerts
+    print(f"⚠️ No alerts found for farm: {user_id}")
+
 # --- Logging Functions ---
 def save_log_entry(farm_id: str, log_data: dict) -> Optional[Dict]:
     """
@@ -49,7 +55,7 @@ def save_log_entry(farm_id: str, log_data: dict) -> Optional[Dict]:
     """
     # The log_data should match the schema for the 'logs' collection
     # Example: {"activityType": "Irrigation", "description": "Drip for 2 hours"}
-    return _make_api_request('POST', f'/api/farms/{farm_id}/activities', json_data=log_data)
+    return _make_api_request('POST', f'/api/farms/{farm_id}/logs', json_data=log_data)
 
 
 # --- Functions that your ML service might need but don't have a direct CRUD endpoint ---
