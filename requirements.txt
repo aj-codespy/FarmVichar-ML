@@ -1,15 +1,28 @@
 fastapi
 uvicorn
-pydantic
 python-multipart
+
+# Data Validation
+pydantic
+
+# Google AI & Cloud Services
 google-generativeai
+langchain
+langchain-google-genai
+google-cloud-speech
+google-auth
+
+# Firebase Database
+firebase-admin
+
+# Machine Learning & Data
 faiss-cpu
 scikit-learn
 joblib
 pandas
-langchain
-langchain-google-genai
+numpy
+
+# Utilities
 requests
 Pillow
-google-cloud-speech
-
+pydub
