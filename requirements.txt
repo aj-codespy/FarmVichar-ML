@@ -12,3 +12,4 @@ langchain-google-genai
 requests
 Pillow
 google-cloud-speech
+pydub
