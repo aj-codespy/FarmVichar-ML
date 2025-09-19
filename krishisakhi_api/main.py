@@ -73,54 +73,19 @@ from google.oauth2 import service_account
 # ... (your existing lifespan manager and app setup)
 
 # --- UPDATED: Helper Function for Google Speech-to-Text (without pydub) ---
-def transcribe_audio_with_google(audio_bytes: bytes, language_code: str, filename: str) -> str:
-    """
-    Transcribes various audio file formats by guessing the encoding from the filename.
-    WARNING: This approach is not robust and may fail or produce poor results if the
-    audio file's properties do not match the hardcoded assumptions.
-    """
+def transcribe_audio_with_google(audio_bytes: bytes, language_code: str) -> str:
     client = app_state.get("speech_client")
-    if not client:
-        raise HTTPException(status_code=503, detail="Speech client not initialized.")
-    
+    if not client: raise HTTPException(status_code=503, detail="Speech client not initialized.")
     try:
         audio = speech.RecognitionAudio(content=audio_bytes)
-        
-        # --- Guess the encoding based on the file extension ---
-        encoding = None
-        file_ext = os.path.splitext(filename)[1].lower()
-
-        if file_ext == ".ogg":
-            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
-        elif file_ext == ".wav":
-            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
-        elif file_ext == ".mp3":
-            encoding = speech.RecognitionConfig.AudioEncoding.MP3
-        # .m4a (AAC) is not directly supported by this enum, FLAC is an alternative
-        elif file_ext == ".flac": 
-            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported audio file format: {file_ext}")
-
-        # --- Hardcoded sample rate - THIS IS A MAJOR ASSUMPTION ---
-        sample_rate = 16000 
-        
         config_speech = speech.RecognitionConfig(
-            encoding=encoding,
-            sample_rate_hertz=sample_rate,
+            encoding=speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
+            sample_rate_hertz=16000,
             language_code=f"{language_code}-IN",
         )
-
         response = client.recognize(config=config_speech, audio=audio)
-        
-        if response.results:
-            transcript = response.results[0].alternatives[0].transcript
-            print(f"Google transcribed text (in {language_code}): {transcript}")
-            return transcript
-        return ""
-            
+        return response.results[0].alternatives[0].transcript if response.results else ""
     except Exception as e:
-        print(f"Error during Google Speech-to-Text transcription: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to transcribe audio: {e}")
 
 # main.py (or wherever your helper function is located)
@@ -205,18 +170,78 @@ async def chat_with_assistant(
     
     return schemas.ChatResponse(response_text=final_response_text, transcribed_text=transcribed_text)
 
+# main.py
+
+# --- Make sure to add this import at the top of your file ---
+from langchain_core.messages import HumanMessage
+# ... (all your other imports)
+
+
+# --- UPDATED: Helper function for image-to-text description ---
+import base64
+from langchain_core.messages import HumanMessage
+# ... (all your other imports)
+
+
+# --- UPDATED: Helper function for image-to-text description ---
 def generate_description_from_image(image_bytes: bytes) -> str:
-    """Uses Gemini Vision to generate a description for a log entry."""
+    """Uses Gemini Vision via LangChain to generate a description for a log entry."""
     print("Generating description from image...")
     try:
-        image = Image.open(io.BytesIO(image_bytes))
-        # Using the globally defined llm_model
-        response = llm.invoke(
-            [
-                "Describe this image from a farm in one concise sentence for a logbook entry.",
-                image
+        # --- NEW: Encode the image bytes into a Base64 string ---
+        encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Create a HumanMessage with the correctly formatted image data
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": "Describe this image from a farm in one concise sentence for a logbook entry. Identify the problem in teh crop, and provide the solution as well. Based on this you have to generate the description for that log. If it is not related to farming please say 'No farming related content found in image'. ",
+                },
+                {
+                    "type": "image_url",
+                    # Pass the encoded string with the data URI scheme
+                    "image_url": f"data:image/jpeg;base64,{encoded_image}"
+                },
             ]
         )
+        
+        # Invoke the LLM with the structured message
+        response = llm.invoke([message])
+        
+        description = response.content
+        print(f"✅ Generated description: {description}")
+        return description
+    except Exception as e:
+        print(f"❌ Error generating image description: {e}")
+        return "Could not generate description from image."
+# ... (the rest of your main.py file remains the same)
+
+
+# --- UPDATED: Logging API Endpoint ---
+# main.py
+# ... (all your existing imports and setup)
+
+# --- UPDATED: Logging API Endpoint (Text/Form based) ---
+# main.py
+from fastapi import FastAPI, HTTPException, Path, File, UploadFile, Form
+# ... (all your other imports)
+from langchain_core.messages import HumanMessage
+
+
+# --- Helper function for image-to-text description ---
+def generate_description_from_image(image_bytes: bytes) -> str:
+    """Uses Gemini Vision via LangChain to generate a description for a log entry."""
+    print("Generating description from image...")
+    try:
+        encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": "Describe this image from a farm in one concise sentence for a logbook entry. It should identify the problem in the crop, and provide the solution as well. Based on this you have to generate the description for that log. If it is not related to farming please say 'No farming related content found in image'."},
+                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{encoded_image}"},
+            ]
+        )
+        response = llm.invoke([message])
         description = response.content
         print(f"✅ Generated description: {description}")
         return description
@@ -224,38 +249,49 @@ def generate_description_from_image(image_bytes: bytes) -> str:
         print(f"❌ Error generating image description: {e}")
         return "Could not generate description from image."
 
-
 # --- UPDATED: Logging API Endpoint ---
 @app.post("/logs/{farm_id}")
 async def create_log_entry(
     farm_id: str,
-    log_type: str = Form(...),
-    notes: Optional[str] = Form(None),
+    # --- Data now comes from Form fields instead of a JSON body ---
+    notes: str = Form(...),
+    language_code: str = Form("en"),
+    log_type: Optional[str] = Form("General Observation"),
     image_file: Optional[UploadFile] = File(None)
 ):
     """
-    Receives log data. If an image is provided, it generates a description.
-    If notes are provided, it uses those. Finally, it saves the log via the DB Gateway.
+    Receives log data and an optional image via a multipart form.
+    If an image is provided, it generates a description.
+    Saves the log via the DB Gateway.
     """
     description = notes
-    image_bytes = None
-
-    # If an image file is uploaded, it takes priority for the description
+    log_language = language_code
+    
+    # If an image file is uploaded, generate a description and override the text notes
     if image_file:
         image_bytes = await image_file.read()
+        # The image description is generated in English
         description = generate_description_from_image(image_bytes)
+        # We now consider the log's primary language to be English
+        log_language = 'en'
 
     if not description:
         raise HTTPException(status_code=400, detail="Log must have notes or an image.")
 
-    # This is the final data payload to be sent to your database backend
+    # Translate the description to English for consistent storage if it's not already
+    if log_language != 'en':
+        english_description = translate_text(description, src=log_language, dest='en')
+    else:
+        english_description = description
+        
+    # Prepare the final data payload for your database backend
     log_data_to_save = {
         "farmId": farm_id,
         "activityType": log_type,
-        "description": description,
-        # In a real implementation, you would upload the image to a service like
-        # Firebase Storage and include the URL here.
-        # "imageUrl": "..." 
+        "description": english_description,
+        "original_notes": notes, # Always save the original farmer's text
+        "language_code": language_code
+        # In a real app, you would also upload the image and save its URL
     }
 
     # Call your API client to save the data
@@ -265,6 +301,10 @@ async def create_log_entry(
         raise HTTPException(status_code=500, detail="Failed to save log entry via API.")
     
     return result
+
+# ... (rest of your main.py file)
+
+# ... (rest of your main.py file)
 
 
 from datetime import datetime, timezone
