@@ -1,0 +1,66 @@
+{
+  "user": {
+    "credentials": {"username": "suresh", "password": "demo"},
+    "preferences": {"language_code": "ml", "language_name": "Malayalam"},
+    "farm": {
+      "area": 5.0,
+      "soilType": "Laterite",
+      "waterSource": "Canal",
+      "ph": 6.2,
+      "nitrogen": 125.0,
+      "phosphorus": 48.5,
+      "potassium": 155.0,
+      "extraData": {
+        "personal_info": {
+          "full_name": "Suresh Kumar",
+          "age": 42,
+          "gender": "Male",
+          "preferred_language": "Malayalam",
+          "education_level": "10th Standard",
+          "farming_experience_years": 20
+        },
+        "location_details": {
+          "village": "Kizhakkencherry",
+          "taluk": "Alathur",
+          "district": "Palakkad",
+          "state": "Kerala",
+          "pin_code": 678684
+        },
+        "land_status": "Owned",
+        "cultivation_details": {
+          "current_crops": ["Rice (Uma variety)", "Banana (Nendran)"],
+          "cropping_seasons": ["Kharif", "Rabi"],
+          "crop_rotation_history": ["Rice", "Pulses", "Rice"],
+          "yield_history_rice_kg_per_acre": 2200,
+          "seed_source": "Local Cooperative Society"
+        },
+        "irrigation_method": "Canal-fed, flood irrigation",
+        "climate_notes": "Monsoon-dependent, occasional summer showers",
+        "resources": {
+          "available_machinery": "Tractor (rented), Sprayer",
+          "labor_availability": "Family and 2 hired laborers",
+          "input_usage_history": ["Urea", "Potash", "Neem oil"],
+          "storage_facility_access": true
+        },
+        "challenges": {
+          "past_pest_issues": "Rice stem borer, Banana pseudo-stem weevil",
+          "weather_related_losses": "Minor flooding during 2021 monsoon",
+          "selling_market": "Alathur local market (APMC)"
+        }
+      }
+    }
+  },
+  "dashboard_predictions": {
+    "recommended_crop": "Rice",
+    "yield_prediction_kg_acre": 2150.0,
+    "pest_risk_percent": 42,
+    "quality_grading_score": 78,
+    "price_range_per_quintal": {"crop_name": "Rice", "min_price": 2100, "max_price": 2350},
+    "applicable_schemes": ["PM-KISAN", "PMFBY"],
+    "applied_schemes": ["PM-KISAN"]
+  },
+  "weather": {"temperature": 29.0, "weather": "Partly Cloudy", "humidity": 74},
+  "alerts": [],
+  "logs": []
+}
+

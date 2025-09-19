@@ -1,0 +1,12 @@
+{
+  "users": {
+    "ramesh_123": {
+      "id": "ramesh_123",
+      "name": "Ramesh Kumar",
+      "primary_crop": "Wheat",
+      "village": "Rampur",
+      "state": "Maharashtra",
+      "preferred_language": "hi"
+    }
+  }
+}

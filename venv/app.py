@@ -1,156 +1,224 @@
 # app.py
 import streamlit as st
-import os
-from config import GEMINI_API_KEY, VECTOR_DB_PATH, DOCS_PATH, SUPPORTED_LANGUAGES
+import json
+import pandas as pd
+from pathlib import Path
+import plotly.graph_objects as go
+import base64
+
+# Import utility functions from your project
+from utils.chatbot_utils import process_chat_query, analyze_image_with_gemini
 from utils.rag_utils import load_faiss_index
-from utils.ml_utils import compute_predictions
-from utils.chatbot_utils import process_chat_query
-from utils.api_utils import fetch_weather, fetch_gov_info
+from utils.translation_utils import translate_text
+import config
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Krishi Sakhi", page_icon="🌱", layout="wide")
+st.set_page_config(
+    page_title="Krishi Sakhi",
+    page_icon="🌾",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# --- State Management ---
-if 'profile' not in st.session_state:
-    st.session_state.profile = None
-if 'predictions' not in st.session_state:
-    st.session_state.predictions = {}
-# Chat history now stores dictionaries for flexibility with images
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
-
-
-# --- Load Resources ---
+# --- Global State and Data Loading ---
 @st.cache_resource
 def load_resources():
-    print("[APP] Loading resources (FAISS index and docs)...")
-    index, docs = load_faiss_index(VECTOR_DB_PATH, DOCS_PATH)
-    return index, docs
+    """Load all necessary data and models once."""
+    base_path = Path(__file__).parent
+    
+    try:
+        with open(base_path / "demo_data.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        st.error("FATAL: demo_data.json not found. Please ensure it's in the same directory as app.py.")
+        st.stop()
+    
+    faiss_index, docs = load_faiss_index(
+        str(base_path / config.VECTOR_DB_PATH), 
+        str(base_path / config.DOCS_PATH)
+    )
+    if faiss_index is None:
+        st.warning("Warning: FAISS index not found. The chatbot may not have full knowledge.")
+    
+    return data, faiss_index, docs
 
-faiss_index, docs = load_resources()
+# --- Initialize App State ---
+if 'app_data' not in st.session_state:
+    app_data, faiss_index, docs = load_resources()
+    st.session_state.app_data = app_data
+    st.session_state.faiss_index = faiss_index
+    st.session_state.docs = docs
+    st.session_state.messages = []
 
-# --- Main Application (No Changes Here) ---
-def main():
-    if not GEMINI_API_KEY or "your_gemini_api_key" in GEMINI_API_KEY:
-        st.error("🚨 Gemini API key is not configured! Please set it in config.py.")
-        return
-    if not faiss_index:
-        st.error("🚨 Vector DB not found! Please run `build_vector_db.py` first.")
-        return
+# --- UI Helper Functions ---
+def create_gauge_chart(value, title, max_value):
+    """Creates a Plotly gauge chart."""
+    return go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        title={'text': title, 'font': {'size': 20}},
+        gauge={
+            'axis': {'range': [0, max_value]},
+            'bar': {'color': "#2E8B57"},
+        }
+    ))
 
-    st.title("🌱 Krishi Sakhi POC")
-    st.caption("Your AI Farming Companion in your pocket, anywhere, anytime.")
+# --- Data Access ---
+USER_PROFILE = st.session_state.app_data["user"]["farm"]
+PERSONAL_INFO = st.session_state.app_data["user"]["farm"]["extraData"]["personal_info"]
+PREDICTIONS = st.session_state.app_data["dashboard_predictions"]
+WEATHER = st.session_state.app_data["weather"]
 
-    tab1, tab2, tab3 = st.tabs(["👤 Farm Profile", "📊 Dashboard", "💬 AI Chatbot"])
+# --- Main Application ---
+st.title(f"🌾 Krishi Sakhi Dashboard for {PERSONAL_INFO['full_name']}")
+st.caption(f"Location: {USER_PROFILE['extraData']['location_details']['village']}, Kerala | Today: September 17, 2025")
 
-    with tab1:
-        profiling_section()
-    with tab2:
-        dashboard_section()
-    with tab3:
-        chatbot_section()
+# --- Sidebar for Language Selection ---
+st.sidebar.title("Settings")
+selected_language = st.sidebar.selectbox(
+    "Choose Language", 
+    options=list(config.SUPPORTED_LANGUAGES.keys()),
+    format_func=lambda x: config.SUPPORTED_LANGUAGES[x],
+    index=list(config.SUPPORTED_LANGUAGES.keys()).index(st.session_state.app_data["user"]["preferences"]["language_code"])
+)
+st.session_state.app_data["user"]["preferences"]["language_code"] = selected_language
 
-# --- Profiling and Dashboard Sections (No Changes Here) ---
-def profiling_section():
-    st.header("👤 Farmer & Farm Profiling")
-    st.write("Enter your details to get personalized advice.")
-    with st.form("profiling_form"):
-        profile = st.session_state.profile or {}
-        c1, c2 = st.columns(2)
-        with c1:
-            village = st.text_input("Village", value=profile.get("village", "Pune"))
-            crop = st.selectbox("Primary Crop", ["Paddy", "Banana", "Brinjal", "Coconut", "Tomato", "Wheat", "Rice", "Maize", "Sugarcane", "Cotton", "Jute", "Oilseeds", "Pulses", "Fruits", "Vegetables", "Others"], index=0)
-            land_size = st.number_input("Land Size (acres)", min_value=0.1, value=profile.get("land_size", 2.0))
-        with c2:
-            soil = st.selectbox("Soil Type", ["Sandy", "Clay", "Laterite", "Black", "Red"], index=1)
-            ph = st.number_input("Soil pH", min_value=0.0, max_value=14.0, value=profile.get("ph", 6.5))
-            language = st.selectbox("Preferred Language", options=list(SUPPORTED_LANGUAGES.keys()), format_func=lambda code: SUPPORTED_LANGUAGES[code], index=1)
-        
-        if st.form_submit_button("Save Profile"):
-            st.session_state.profile = {"village": village, "crop": crop, "soil": soil, "land_size": land_size, "ph": ph, "language": language}
-            st.session_state.predictions = compute_predictions(st.session_state.profile)
-            st.success("✅ Profile saved successfully!")
 
-def dashboard_section():
-    st.header("📊 Personalized Dashboard")
-    if not st.session_state.profile:
-        st.info("Please complete your profile in the 'Farm Profile' tab.")
-        return
-    profile, predictions = st.session_state.profile, st.session_state.predictions
-    weather, gov_info = fetch_weather(profile['village']), fetch_gov_info(profile['crop'])
-    col1, col2, col3 = st.columns(3)
+# --- Main Tabs ---
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "💬 Chat with Krishi Sakhi", "🖼️ Image Analysis", "🔔 Alerts"])
+
+# --- Dashboard Tab ---
+with tab1:
+    st.header("Today's Overview")
+    
+    col1, col2 = st.columns(2)
     with col1:
-        st.subheader("🌦️ Weather")
-        if 'error' in weather: st.warning(weather['error'])
-        else:
-            st.metric("Temperature", f"{weather['temperature']} °C")
-            st.metric("Condition", weather['weather'])
+        st.subheader("Weather")
+        st.metric("Temperature", f"{WEATHER['temperature']} °C")
+        st.metric("Condition", WEATHER['weather'])
+        st.metric("Humidity", f"{WEATHER['humidity']}%")
+
     with col2:
-        st.subheader("📈 ML Predictions")
-        st.metric("Estimated Yield", f"{predictions.get('yield', 'N/A')} kg/acre")
-        st.metric("Pest Risk", f"{predictions.get('pest_risk', 0) * 100:.0f}%")
+        st.subheader("Farmer Profile")
+        st.text(f"Name: {PERSONAL_INFO['full_name']}")
+        st.text(f"Location: {USER_PROFILE['extraData']['location_details']['village']}")
+        st.text(f"Primary Crop: {USER_PROFILE['extraData']['cultivation_details']['current_crops'][0]}")
+
+    st.divider()
+    
+    st.header("AI Predictions & Recommendations")
+    col3, col4, col5 = st.columns(3)
     with col3:
-        st.subheader("🏦 Market & Schemes")
-        if 'error' in gov_info: st.warning(gov_info['error'])
-        else: st.metric(f"Price for {profile['crop']}", f"₹ {gov_info.get('market_price', 'N/A')} /Quintal")
+        fig = create_gauge_chart(PREDICTIONS['pest_risk_percent'], "Pest Risk", 100)
+        st.plotly_chart(fig, use_container_width=True)
+    with col4:
+        fig = create_gauge_chart(PREDICTIONS['quality_grading_score'], "Quality Grading Score", 100)
+        st.plotly_chart(fig, use_container_width=True)
+    with col5:
+        st.metric("Recommended Crop", PREDICTIONS['recommended_crop'])
+        st.metric("Yield Prediction", f"{PREDICTIONS['yield_prediction_kg_acre']} kg/acre")
 
-# --- Chatbot Section (UPDATED) ---
-def chatbot_section():
-    st.header("💬 Chat with Krishi Sakhi")
-    
-    if not st.session_state.profile:
-        st.info("Please complete your profile first for a personalized chat.")
-        return
+    st.divider()
 
-    # Display chat history
-    for message in st.session_state.chat_history:
+    col6, col7 = st.columns(2)
+    with col6:
+        st.subheader("Market Price Outlook")
+        price_range = PREDICTIONS['price_range_per_quintal']
+        st.success(f"Estimated Price for {price_range['crop_name']}: ₹{price_range['min_price']} - ₹{price_range['max_price']} per quintal")
+
+    with col7:
+        st.subheader("Government Schemes")
+        st.write("**Applicable Schemes:**")
+        for scheme in PREDICTIONS['applicable_schemes']: st.info(scheme)
+        st.write("**Applied Schemes:**")
+        for scheme in PREDICTIONS['applied_schemes']: st.success(scheme)
+
+# --- Chat Tab ---
+with tab2:
+    st.header("Chat with your AI Assistant")
+
+    for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            # Check for and display image
-            if "image" in message and message["image"] is not None:
-                st.image(message["image"], width=200)
-            # Check for and display text
-            if "text" in message and message["text"]:
-                st.write(message["text"])
+            st.markdown(message["content"])
 
-    # --- New Input area ---
-    user_lang_code = st.session_state.profile.get("language", "en")
-    user_lang_name = SUPPORTED_LANGUAGES.get(user_lang_code, "your language")
+    # Combined input area for text and voice
+    text_prompt = st.text_input("Ask a question in text...", key="text_input")
+    audio_file = st.file_uploader("Or upload your question as a voice note...", type=["wav", "ogg", "mp3"])
+
+    if st.button("Send Message", key="send_chat"):
+        user_input_content = ""
+        final_query = ""
+
+        if audio_file:
+            st.info("Processing voice note...")
+            # Mock transcription for demo purposes
+            transcribed_text = "How to manage stem borer in my rice crop?"
+            final_query = transcribed_text
+            user_input_content = f"🎤 Voice Note: *'{transcribed_text}'*"
+            st.audio(audio_file.getvalue())
+        elif text_prompt:
+            final_query = text_prompt
+            user_input_content = text_prompt
+
+        if final_query:
+            st.session_state.messages.append({"role": "user", "content": user_input_content})
+            with st.chat_message("user"):
+                st.markdown(user_input_content)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = process_chat_query(
+                        query=final_query,
+                        profile=USER_PROFILE,
+                        predictions=PREDICTIONS,
+                        faiss_index=st.session_state.faiss_index,
+                        docs=st.session_state.docs,
+                        language=selected_language,
+                        image_bytes=None
+                    )
+                    st.markdown(response)
+            
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+
+# --- Image Analysis Tab ---
+with tab3:
+    st.header("Analyze Crop Health from an Image")
+    uploaded_file = st.file_uploader("Upload an image of your crop", type=["png", "jpg", "jpeg"])
+
+    if uploaded_file is not None:
+        bytes_data = uploaded_file.getvalue()
+        st.image(bytes_data, caption='Uploaded Image.', use_column_width=True)
+        
+        with st.spinner("Analyzing image..."):
+            analysis_result = analyze_image_with_gemini(bytes_data)
+            st.subheader("AI Analysis Result:")
+            st.write(analysis_result)
+
+# --- NEW: Alerts Tab ---
+with tab4:
+    st.header("Notifications & Alerts")
+
+    # This section uses static data for the demo.
+    # In a real app, this would come from the /alerts API endpoint.
     
-    # We use st.container to group the uploader and the chat_input
-    with st.container():
-        uploaded_image = st.file_uploader("Upload an image of your crop (optional)", type=["png", "jpg", "jpeg"])
-        query = st.chat_input(f"Ask a question in {user_lang_name}...")
+    st.warning("**High Priority Alert: Pest Risk**")
+    st.write(f"""
+    - **Risk Level**: High ({PREDICTIONS['pest_risk_percent']}%)
+    - **Details**: Our AI model predicts a high probability of a **Rice Stem Borer** outbreak in the Kizhakkencherry area this week due to favorable weather conditions.
+    - **Suggestion**: Proactively apply a neem oil solution or consult the chatbot for specific organic pesticide recommendations.
+    """)
 
-    if query:
-        # Prepare user message for history
-        user_message = {"role": "user", "text": query}
-        image_bytes = None
-        if uploaded_image is not None:
-            image_bytes = uploaded_image.getvalue()
-            user_message["image"] = image_bytes
+    st.info("**Medium Priority Alert: Weather Advisory**")
+    st.write(f"""
+    - **Event**: Moderate rainfall expected in 2 days.
+    - **Details**: The IMD forecast indicates a 70% chance of 10-15mm of rain.
+    - **Suggestion**: Consider postponing your next irrigation cycle to conserve water and prevent waterlogging.
+    """)
 
-        # Append user message and display it
-        st.session_state.chat_history.append(user_message)
-        with st.chat_message("user"):
-            if image_bytes:
-                st.image(image_bytes, width=200)
-            st.write(query)
-
-        # Generate and display assistant response
-        with st.chat_message("assistant"):
-            with st.spinner("Krishi Sakhi is analyzing and thinking..."):
-                response_text = process_chat_query(
-                    query=query,
-                    profile=st.session_state.profile,
-                    predictions=st.session_state.predictions,
-                    faiss_index=faiss_index,
-                    docs=docs,
-                    language=user_lang_code,
-                    image_bytes=image_bytes  # Pass the image data to the backend
-                )
-                st.write(response_text)
-                # Append assistant message to history
-                st.session_state.chat_history.append({"role": "assistant", "text": response_text})
-
-if __name__ == "__main__":
-    main()
+    st.success("**Scheme Information**")
+    st.write(f"""
+    - **Scheme**: Pradhan Mantri Fasal Bima Yojana (PMFBY)
+    - **Details**: The deadline to enroll for crop insurance for the Rabi season is approaching.
+    - **Suggestion**: Visit the chatbot and ask "How to apply for PMFBY" to get a step-by-step guide.
+    """)

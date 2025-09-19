@@ -1,7 +1,0 @@
-streamlit
-google-generativeai
-faiss-cpu
-scikit-learn
-numpy
-requests
-Pillow

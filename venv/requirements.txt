@@ -1,7 +1,14 @@
-streamlit
+fastapi
+uvicorn
+pydantic
+python-multipart
 google-generativeai
 faiss-cpu
 scikit-learn
-numpy
+joblib
+pandas
+langchain
+langchain-google-genai
 requests
 Pillow
+google-cloud-speech

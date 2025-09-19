@@ -36,6 +36,7 @@ MANIFEST
 # Environment variables
 .env
 .env.*
+.keys.json
 
 # IDE / Editor specific files
 .idea/

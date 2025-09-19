@@ -8,13 +8,17 @@ GEMINI_API_KEY = 'AIzaSyBozQi2V59ZCzUI6smDyDHt1j9sSSkcZbE'
 OPENWEATHER_API_KEY = "b9137d6319bf16636be1ef01db243576"
 DATAGOV_API_KEY = "your_datagov_api_key_here"
 
+# --- External Backend Base URL ---
+# Can be overridden via env var EXTERNAL_API_BASE
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://farmvichardatabase.onrender.com/")
+
 # --- Model Configuration ---
 MODEL_NAME = "gemini-2.0-flash"
 EMBEDDING_MODEL = "models/embedding-001"
 
 # --- File Paths ---
-VECTOR_DB_PATH = "vector_db/faiss_index.index"
-DOCS_PATH = "vector_db/docs.txt"
+VECTOR_DB_PATH = os.path.join("vector_db", "faiss_index.index")
+DOCS_PATH = os.path.join("vector_db", "docs.txt")
 
 # --- Application Settings ---
 # Dictionary of supported languages. Key: language code, Value: display name.
