@@ -3,6 +3,8 @@ import os
 
 # --- API Keys ---
 # IMPORTANT: Replace these with your actual keys.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GOOGLE_KEY_FILE_PATH = os.path.join(PROJECT_ROOT, "keys.json")
 # For better security, set them as environment variables.
 GEMINI_API_KEY = 'AIzaSyBozQi2V59ZCzUI6smDyDHt1j9sSSkcZbE'
 OPENWEATHER_API_KEY = "b9137d6319bf16636be1ef01db243576"
