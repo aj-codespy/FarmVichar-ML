@@ -39,7 +39,6 @@ def process_chat_query(query: str, profile: dict, predictions: dict, faiss_index
     prompt = f"""
     You are 'Krishi Sakhi', an AI farming assistant. Your final response MUST be in {native_language_name}.
     Analyze all the following information to provide a helpful and actionable solution. For every statement or recommendation you make, provide the reasoning behind it based on the user's context.
-
     Farmer's Profile: {profile}
     Today's Predictions: {predictions}
     Analysis of Uploaded Image: {image_analysis}
@@ -49,6 +48,7 @@ def process_chat_query(query: str, profile: dict, predictions: dict, faiss_index
     Based on all the above information, provide a comprehensive answer in {native_language_name}.
     
     The answer has to be to the point only answering the given {eng_query} question only. No extra information. Only answer the asked question and give a small to the point reasoning for the same no extra analysis. Provide everything in proper markdown.
+    Also provide the solution to the identified problem.
     """
     
     response = llm_model.generate_content(prompt)
