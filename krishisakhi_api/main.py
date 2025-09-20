@@ -73,46 +73,21 @@ from google.oauth2 import service_account
 # ... (your existing lifespan manager and app setup)
 
 # --- UPDATED: Helper Function for Google Speech-to-Text (without pydub) ---
-# In main.py, make sure you have these imports
-from pydub import AudioSegment
-import io
-
-# Replace your existing transcription function with this one
 def transcribe_audio_with_google(audio_bytes: bytes, language_code: str) -> str:
-    """
-    Transcribes any common audio file format by dynamically converting it to WAV.
-    """
     client = app_state.get("speech_client")
-    if not client:
-        raise HTTPException(status_code=503, detail="Speech client not initialized.")
-    
+    if not client: raise HTTPException(status_code=503, detail="Speech client not initialized.")
     try:
-        # Use pydub to read the audio, regardless of its original format (m4a, mp3, ogg, etc.)
-        audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
-        
-        # Get the actual sample rate from the file
-        sample_rate = audio_segment.frame_rate
-        
-        # Convert the audio in-memory to the high-quality WAV format (LINEAR16)
-        buffer = io.BytesIO()
-        audio_segment.export(buffer, format="wav")
-        content = buffer.getvalue()
-
-        # Configure the request for the standardized WAV format
-        audio = speech.RecognitionAudio(content=content)
+        audio = speech.RecognitionAudio(content=audio_bytes)
         config_speech = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,
-            language_code=f"{language_code}-IN"
+            encoding=speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
+            sample_rate_hertz=16000,
+            language_code=f"{language_code}-IN",
         )
-
         response = client.recognize(config=config_speech, audio=audio)
-        
         return response.results[0].alternatives[0].transcript if response.results else ""
-            
     except Exception as e:
-        print(f"Error during Google Speech-to-Text transcription: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to transcribe audio: {e}")
+
 # main.py (or wherever your helper function is located)
 
 import json
@@ -426,4 +401,3 @@ def save_log_to_api(farm_id: str, structured_log: dict):
     except Exception as e:
         print(f"Exception in save_log_to_api: {e}")
         return {"status": "error", "reason": str(e)}
-
